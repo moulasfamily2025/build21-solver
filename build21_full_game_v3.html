@@ -1,0 +1,64 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>4 Hand 21 • Full-Game Solver Solver</title><style>
+:root{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color-scheme:dark;background:#0d1422;color:#edf2fa}*{box-sizing:border-box}body{margin:0;padding:12px 12px 32px;max-width:920px;margin-inline:auto}h1{font-size:23px;margin:8px 0 3px}.muted{color:#a6b4c8;font-size:13px}.panel{background:#172338;border:1px solid #34445b;border-radius:15px;padding:13px;margin:12px 0}.stats,.hands,.ranks{display:grid;gap:7px}.stats{grid-template-columns:repeat(4,1fr)}.hands{grid-template-columns:repeat(4,minmax(0,1fr))}.ranks{grid-template-columns:repeat(7,minmax(0,1fr))}button{border:1px solid #52617b;background:#283951;color:white;border-radius:10px;min-height:44px;font-weight:650;font-size:15px;touch-action:manipulation}button:disabled{opacity:.33}button.active,.primary{background:#2879ee;border-color:#69a3ff}.danger{background:#7a343c}.hand{text-align:center;border:1px solid #455772;border-radius:12px;padding:7px 4px;min-width:0}.hand strong{font-size:26px;display:block}.hand .cards{font-size:13px;min-height:34px;overflow-wrap:anywhere}.hand button{width:100%;font-size:13px;margin-top:6px;min-height:37px}.recommend{background:#183b54;border:1px solid #3f8ab0}.recommend h2{font-size:23px;margin:4px 0 8px}.stat{text-align:center;background:#223249;border-radius:9px;padding:8px 2px}.stat strong{display:block;font-size:18px}.stat small{color:#a6b4c8;font-size:10px}.row{display:flex;gap:8px;align-items:center}.row button{flex:1}.hint{font-size:13px;line-height:1.45;color:#c2d0e0}.small{font-size:12px}.bar{height:8px;border-radius:8px;background:#314158;overflow:hidden}.fill{height:100%;background:#57b3e8;width:0}.footer{font-size:12px;color:#9babc0}.hidden{display:none!important}input[type=range]{width:100%}.good{color:#8ce4bd}.warn{color:#ffd18c}#analysis{white-space:pre-line}#deck{display:grid;grid-template-columns:repeat(13,minmax(0,1fr));gap:3px}#deck span{text-align:center;background:#23354d;padding:4px 0;border-radius:5px;font-size:11px}#deck b{display:block}label{font-size:13px}.toggle{display:flex;gap:8px;align-items:center}select{background:#283951;color:white;border-radius:7px;padding:6px;border:1px solid #52617b} .mini{font-size:11px}
+</style></head><body>
+<h1>♠ 4 Hand 21 • Full-Game Solver</h1><div class="muted">iPad-ready • full-deck Monte Carlo • offline once opened</div>
+<div class="panel"><div class="stats"><div class="stat"><strong id="score">0</strong><small>POINTS</small></div><div class="stat"><strong id="streak">0</strong><small>STREAK</small></div><div class="stat"><strong id="busts">0/3</strong><small>BUSTS</small></div><div class="stat"><strong id="stays">0/2</strong><small>STAYS USED</small></div></div><div style="margin-top:9px" class="row"><span class="muted" id="played">0/52 cards</span><span class="muted" id="remain">52 remain</span></div></div>
+<div class="panel"><b>Four hands</b><div class="hands" id="hands" style="margin-top:10px"></div></div>
+<div class="panel"><b>1. Tap the card showing in Triumph</b><div class="ranks" id="ranks" style="margin-top:10px"></div><p id="selected" class="muted">No card selected</p></div>
+<div class="panel recommend"><b>2. Best simulated move</b><h2 id="move">Choose a card</h2><div class="hint" id="analysis">Runs full-remaining-deck simulations for each legal move.</div><div class="bar" style="margin-top:10px"><div class="fill" id="progress"></div></div><div class="row" style="margin-top:10px"><button id="think" class="primary" disabled>Analyze</button><button id="confirm" disabled>Confirm recommended move</button></div><p class="mini" id="samples"></p></div>
+<div class="panel"><div class="row"><button id="undo">↶ Undo</button><button id="reset" class="danger">New game</button></div><div class="row" style="margin-top:9px"><label for="depth">Simulation strength</label><select id="depth"><option value="12">Quick (12 futures)</option><option value="32" selected>Balanced (32 futures)</option><option value="64">Deep (64 futures)</option><option value="128">Maximum (128 futures)</option></select></div><p class="hint">Use the <b>Play</b> buttons to record a different move. For a Stay recommendation, tap <b>Stay</b> on the indicated hand, then place the same card. Undo reverses one action.</p></div>
+<div class="panel"><b>Remaining cards</b><div id="deck" style="margin-top:8px"></div><p class="footer">Cards are tracked by rank, not suit. Each rank starts with four copies.</p></div>
+<div class="footer">Experimental, not a guaranteed win. Uses full-deck Monte Carlo with approximate future decisions. Assumes a 52-card deck, 3 bust limit, 2 stays, and uncapped doubling streak bonuses. Confirm scoring rules in the game. Practice mode only until validated.</div>
+<script>
+'use strict';
+const R=['A','2','3','4','5','6','7','8','9','10','J','Q','K'], V=[1,2,3,4,5,6,7,8,9,10,10,10,10];
+const empty=()=>({h:[[],[],[],[]],used:Array(13).fill(0),score:0,streak:0,bust:0,stay:0,turn:0});
+let state=empty(), selected=-1, history=[], runId=0, recommendation=null;
+const $=id=>document.getElementById(id), copy=s=>({h:s.h.map(a=>a.slice()),used:s.used.slice(),score:s.score,streak:s.streak,bust:s.bust,stay:s.stay,turn:s.turn});
+function total(h){let n=0,aces=0;for(const x of h){n+=V[x];if(x===0)aces++}return aces&&n+10<=21?n+10:n}
+function outcome(h){let t=total(h);if(t>21)return -1;if(h.length===5)return t===21?1000:800;if(h.length===3&&h.every(x=>x===6))return 600;return t===21?400:0}
+function bonus(streak){return streak<=0?0:250*Math.pow(2,Math.min(30,streak-1))}
+function apply(s,card,hand,stay=-1){let a=copy(s);if(stay>=0){if(a.stay>=2||!a.h[stay].length)return null;a.h[stay]=[];a.stay++}a.h[hand].push(card);const pts=outcome(a.h[hand]);if(pts!==0)a.h[hand]=[];if(pts<0){a.bust++;a.streak=0}else if(pts>0){a.score+=pts+bonus(a.streak);a.streak++}else a.streak=0;a.used[card]++;a.turn++;return a}
+function options(s){let out=[];for(let i=0;i<4;i++)out.push({hand:i,stay:-1});if(s.stay<2)for(let j=0;j<4;j++)if(s.h[j].length)for(let i=0;i<4;i++)out.push({hand:i,stay:j});return out}
+function remaining(s){let a=[];for(let r=0;r<13;r++)for(let k=s.used[r];k<4;k++)a.push(r);return a}
+function shuffle(a){for(let i=a.length-1;i>0;i--){let j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
+// Heuristic values a hand's chance of completing a 21 or five-card clear,
+// with a special premium for two or more simultaneously ready hands.
+function potential(s,counts){let n=counts.reduce((a,b)=>a+b,0);if(!n)return 0;let value=0,ready=0,occupied=0;for(const h of s.h){if(!h.length)continue;occupied++;let hit=0,safe=0,progress=0;for(let r=0;r<13;r++){if(!counts[r])continue;let next=[...h,r],p=outcome(next);if(p>0)hit+=counts[r]*(p+(s.streak?Math.min(4000,bonus(s.streak)):0)*.4);if(p>=0)safe+=counts[r];if(p===0&&total(next)<=21)progress+=counts[r]}
+ let t=total(h),length=h.length;
+ value+=hit/n*1.8+safe/n*105+progress/n*35+length*55-Math.max(0,t-17)*18;
+ if(hit>0)ready++;
+ if(length===4)value+=230; // a fifth safe card clears the hand
+ if(length===3)value+=65;
+ }
+ value+=Math.max(0,4-occupied)*90;
+ if(ready>=2)value+=ready*110;
+ value+=Math.max(0,2-s.stay)*65;
+ return value;
+}
+function evaluate(s,prev,counts,o){let gain=s.score-prev.score, bust=s.bust-prev.bust;
+ let val=gain - bust*(2600+prev.bust*1250) - (o.stay>=0?350:0);
+ // More important to preserve the game as the bust limit approaches.
+ if(s.bust>=3)val-=Math.max(0,52-s.turn)*150;
+ val+=potential(s,counts);
+ // Rewards future consecutive clears without assuming they will occur.
+ if(s.streak>0)val+=Math.min(900,bonus(s.streak)*.5)+100;
+ return val;
+}
+function greedy(s,card,counts){let best=-Infinity,choice=null;for(const o of options(s)){let a=apply(s,card,o.hand,o.stay);if(!a)continue;let val=evaluate(a,s,counts,o);if(val>best){best=val;choice=o}}return choice}
+function rollout(base,seq,first){let s=apply(base,seq[0],first.hand,first.stay);if(!s)return -1e10;let counts=Array(13).fill(4);for(let r=0;r<13;r++)counts[r]-=s.used[r];for(let k=1;k<seq.length&&s.bust<3;k++){let r=seq[k];counts[r]--;let o=greedy(s,r,counts);if(!o)break;s=apply(s,r,o.hand,o.stay)}return s.score + (s.bust<3?potential(s,counts)*.3:0) - Math.max(0,52-s.turn)*(s.bust>=3?40:0)}
+function analyze(){let id=++runId,card=selected;if(card<0||state.bust>=3||state.used[card]>=4)return;let opts=options(state),tot=Number($('depth').value),sum=new Float64Array(opts.length),sq=new Float64Array(opts.length),done=0;
+ recommendation=null;$('think').disabled=true;$('confirm').disabled=true;$('move').textContent='Simulating full games…';$('analysis').textContent=`Testing ${opts.length} moves against ${tot} identical shuffled future decks, through the end of each game.`;$('samples').textContent='';$('progress').style.width='0%';let base=copy(state),deck=remaining(base);deck.splice(deck.indexOf(card),1);
+ function work(){if(id!==runId)return;let chunk=0;while(done<tot&&chunk<2){let seq=[card,...shuffle(deck.slice())];for(let j=0;j<opts.length;j++){let v=rollout(base,seq,opts[j]);sum[j]+=v;sq[j]+=v*v}done++;chunk++} $('progress').style.width=(done/tot*100)+'%';$('samples').textContent=`${done}/${tot} future decks • ${opts.length} moves`;
+ if(done<tot){setTimeout(work,0);return}let ranked=opts.map((o,j)=>({...o,mean:sum[j]/tot,sd:Math.sqrt(Math.max(0,sq[j]/tot-(sum[j]/tot)**2))})).sort((a,b)=>b.mean-a.mean);
+ let best=ranked[0],runner=ranked[1];recommendation=best;$('move').textContent=best.stay>=0?`STAY Hand ${best.stay+1} → Play Hand ${best.hand+1}`:`Play Hand ${best.hand+1}`;
+ $('analysis').textContent=`Full-game rollout estimate: ${Math.round(best.mean).toLocaleString()} relative points. ${runner?`Next best: ${Math.round(runner.mean).toLocaleString()} (difference ${Math.round(best.mean-runner.mean)}).`:''}\nThese are noisy estimates, NOT predicted final scores. Future moves use an approximate policy; close decisions may be ties.`;$('think').disabled=false;$('confirm').disabled=false;}
+ setTimeout(work,0);
+}
+function commit(hand,stay=-1){if(selected<0||state.used[selected]>=4||state.bust>=3)return;let a=apply(state,selected,hand,stay);if(!a)return;history.push({state:copy(state),selected});state=a;selected=-1;invalidate();render()}
+function doStay(i){if(state.stay>=2||!state.h[i].length)return;history.push({state:copy(state),selected});state=copy(state);state.h[i]=[];state.stay++;invalidate();render()}
+function invalidate(){runId++;recommendation=null;$('progress').style.width='0%';$('samples').textContent=''}
+function render(){let hs=$('hands');hs.innerHTML='';state.h.forEach((h,i)=>{let d=document.createElement('div');d.className='hand';d.innerHTML=`<small>HAND ${i+1}</small><strong>${total(h)}</strong><div class="cards">${h.map(r=>R[r]).join(' · ')||'Empty'}</div><small>${h.length}/5 cards</small>`;let b=document.createElement('button');b.textContent='Play';b.disabled=selected<0||state.bust>=3;b.onclick=()=>commit(i);d.appendChild(b);let st=document.createElement('button');st.textContent='Stay';st.disabled=state.stay>=2||!h.length;st.onclick=()=>doStay(i);d.appendChild(st);hs.appendChild(d)});let rs=$('ranks');rs.innerHTML='';R.forEach((r,i)=>{let b=document.createElement('button');b.textContent=r;b.className=selected===i?'active':'';b.disabled=state.used[i]>=4||state.bust>=3;b.onclick=()=>{selected=i;invalidate();render();analyze()};rs.appendChild(b)});$('selected').textContent=selected<0?'No card selected':`Selected: ${R[selected]}`;$('score').textContent=state.score.toLocaleString();$('streak').textContent=state.streak;$('busts').textContent=`${state.bust}/3`;$('stays').textContent=`${state.stay}/2`;$('played').textContent=`${state.turn}/52 cards`;$('remain').textContent=`${52-state.turn} remain`;$('think').disabled=selected<0||state.bust>=3;$('confirm').disabled=!recommendation;$('undo').disabled=!history.length;if(selected<0){$('move').textContent=state.bust>=3?'Game over':'Choose a card';$('analysis').textContent=state.bust>=3?'Three busts ended this game.':'Simulates full remaining games for each move.'}let deck=$('deck');deck.innerHTML=R.map((r,i)=>`<span>${r}<b>${4-state.used[i]}</b></span>`).join('')}
+$('think').onclick=analyze;$('confirm').onclick=()=>{if(recommendation){let o=recommendation;commit(o.hand,o.stay)}};$('undo').onclick=()=>{if(!history.length)return;let p=history.pop();state=p.state;selected=p.selected;invalidate();render();if(selected>=0)analyze()};$('reset').onclick=()=>{if(confirm('Start a new game? This clears the board and history.')){state=empty();selected=-1;history=[];invalidate();render()}};$('depth').onchange=()=>{invalidate();render();if(selected>=0)analyze()};render();
+
+</script></body></html>
